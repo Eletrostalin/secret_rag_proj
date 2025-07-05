@@ -16,4 +16,4 @@ def slice_pdf(input_path, output_path, start=0, end=20):
     print(f"Сохранён файл {output_path} с {end - start} страницами.")
 
 # Пример вызова
-slice_pdf("hipaa-combined.pdf", "hipaa-combined.pdf", 0, 20)
+slice_pdf("hipaa-combined!.pdf", "hipaa-combined!.pdf", 0, 20)
