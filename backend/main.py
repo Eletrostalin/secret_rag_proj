@@ -4,8 +4,10 @@ import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Импортируем роуты
-from backend.api.routes import ask, section
+# Импортируем только нужные роуты
+from backend.api.routes import ask
+# from backend.api.routes import section  # Убрали, чтобы не падало при импорте
+
 from backend.ingestion.chunker import chunk_texts_to_chunks
 from backend.ingestion.parser import parse_pdf
 
@@ -24,9 +26,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Подключаем наши роуты
+# Подключаем роуты
 app.include_router(ask.router, prefix="/ask", tags=["Ask"])
-app.include_router(section.router, prefix="/section", tags=["Section"])
+# app.include_router(section.router, prefix="/section", tags=["Section"])  # Убрали
 
 # Healthcheck endpoint
 @app.get("/health", tags=["Health"])
