@@ -1,6 +1,6 @@
 from PyPDF2 import PdfReader, PdfWriter
 
-def slice_pdf(input_path, output_path, start=0, end=10):
+def slice_pdf(input_path, output_path, start=0, end=20):
     reader = PdfReader(input_path)
     writer = PdfWriter()
 
@@ -16,4 +16,4 @@ def slice_pdf(input_path, output_path, start=0, end=10):
     print(f"Сохранён файл {output_path} с {end - start} страницами.")
 
 # Пример вызова
-slice_pdf("hipaa-combined.pdf", "hipaa-combined.pdf", 0, 12)
+slice_pdf("hipaa-combined.pdf", "hipaa-combined.pdf", 0, 20)

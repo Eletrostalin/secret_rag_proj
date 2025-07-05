@@ -13,3 +13,6 @@ pydantic>=2.0
 python-dotenv
 
 gradio>=4.19
+
+
+greenlet
