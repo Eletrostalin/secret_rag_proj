@@ -82,10 +82,11 @@ async def get_chunks_without_embeddings(session) -> List[Chunk]:
 async def save_embeddings(session, chunks_with_vectors):
     logger.info(f"Saving embeddings for {len(chunks_with_vectors)} chunks...")
     try:
-        async with session.begin():
-            for chunk, embedding in chunks_with_vectors:
-                chunk.embedding_vector = embedding
+        for chunk, embedding in chunks_with_vectors:
+            chunk.embedding_vector = embedding
+        await session.commit()
         logger.info("✅ Embeddings saved successfully.")
     except SQLAlchemyError as e:
         logger.error(f"Error saving embeddings: {e}")
+        await session.rollback()
         raise DatabaseError("Failed to save embeddings.")

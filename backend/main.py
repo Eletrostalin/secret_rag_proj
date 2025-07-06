@@ -5,11 +5,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Импортируем только нужные роуты
-from backend.api.routes import ask
+from backend.api.routes import ask, upload
 # from backend.api.routes import section  # Убрали, чтобы не падало при импорте
 
 from backend.ingestion.chunker import chunk_texts_to_chunks
 from backend.ingestion.parser import parse_pdf
+
+
+# Глобальный формат и уровень
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"
+)
+
+# Uvicorn сам по себе (сервер, ошибки и запросы)
+logging.getLogger("uvicorn").setLevel(logging.INFO)
+logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
 
 app = FastAPI(
     title="HIPAA RAG API",
@@ -28,7 +41,9 @@ app.add_middleware(
 
 # Подключаем роуты
 app.include_router(ask.router, prefix="/ask", tags=["Ask"])
-# app.include_router(section.router, prefix="/section", tags=["Section"])  # Убрали
+app.include_router(upload.router, prefix="/upload", tags=["Upload"])
+# app.include_router(section.router, prefix="/section", tags=["Section"])  # не успел
+
 
 # Healthcheck endpoint
 @app.get("/health", tags=["Health"])

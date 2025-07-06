@@ -4,6 +4,7 @@ import time
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import JSONResponse
 
+from backend.api.services.classifier import classify_request
 from backend.api.services.retrieval import retrieve_top_chunks
 from backend.api.services.context_builder import build_context
 from backend.api.services.prompt_engineering import generate_prompt
@@ -16,13 +17,17 @@ router = APIRouter()
 
 
 @router.get("/", tags=["Ask"])
-async def ask_endpoint(
-    question: str = Query(..., description="Your question about HIPAA.", max_length=500)
-):
+async def ask_endpoint(question: str):
     logger.info(f"Received question: {question}")
 
     try:
         total_start = time.time()
+
+        # 0️⃣ Классификация
+        classification_start = time.time()
+        mode = await classify_request(question)
+        classification_duration = time.time() - classification_start
+        logger.info(f"Classification result: {mode} (took {classification_duration:.2f}s)")
 
         # 1️⃣ Retrieval
         retrieval_start = time.time()
@@ -31,7 +36,14 @@ async def ask_endpoint(
         logger.info(f"Retrieved {len(top_chunks)} chunks in {retrieval_duration:.2f}s")
 
         if not top_chunks:
-            return JSONResponse(content={"answer": "No relevant sections found.", "question": question})
+            return JSONResponse(content={"answer": "No relevant sections found.", "question": question, "mode": mode})
+
+        if mode == "QUOTE":
+            logger.info("QUOTE mode detected — returning verbatim sections.")
+            quoted_text = "\n\n".join(
+                f"§ {c.section_number} ({c.part_number})\n{c.text}" for c in top_chunks
+            )
+            return JSONResponse(content={"answer": quoted_text, "question": question, "mode": mode})
 
         # 2️⃣ Context building
         context_start = time.time()
@@ -54,8 +66,7 @@ async def ask_endpoint(
         total_duration = time.time() - total_start
         logger.info(f"Total /ask duration: {total_duration:.2f}s")
 
-        # 5️⃣ Response
-        return JSONResponse(content={"answer": answer, "question": question})
+        return JSONResponse(content={"answer": answer, "question": question, "mode": mode})
 
     except Exception as e:
         logger.error(f"Error in /ask endpoint: {e}")
