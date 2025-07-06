@@ -4,9 +4,11 @@ from typing import List
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.services.llm_client import call_llm
 from backend.db.database import async_session
 from backend.db.models import Chunk
 from backend.ingestion.embedder import embed_text
+from backend.prompts import QUERY_EXPANSION_PROMPT_TEMPLATE
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -29,8 +31,15 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
     logger.info(f"BM25 найдено кандидатов: {len(bm25_chunks)}")
 
     if not bm25_chunks:
-        logger.warning("BM25 ничего не вернул.")
-        return []
+        logger.warning("BM25 ничего не вернул. Пробуем fallback на все чанки.")
+        # Fallback: загрузить все
+        result = await session.execute(select(Chunk))
+        bm25_chunks = result.scalars().all()
+        logger.info(f"Fallback взял {len(bm25_chunks)} всех чанков из БД.")
+
+        if not bm25_chunks:
+            logger.error("Вообще нет данных в таблице chunks!")
+            return []
 
     # 2️⃣ Dense reranking
     top_chunks = await embedding_rerank(question, bm25_chunks)
@@ -42,9 +51,25 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
 async def bm25_search(session: AsyncSession, question: str, limit: int = 100) -> List[Chunk]:
     """
     Поиск в PostgreSQL по bm25_text.
-    Возвращает топовые чанки по текстовому поиску.
+    Убираем стоп-слова и используем LLM для query expansion.
     """
-    tsquery = func.plainto_tsquery('english', question)
+    # Удаляем стоп-слова
+    cleaned_terms = remove_stopwords(question)
+    if not cleaned_terms:
+        logger.warning("После удаления стоп-слов ничего не осталось.")
+        return []
+
+    # Query expansion через LLM
+    expanded_terms = await expand_query_terms_llm(" ".join(cleaned_terms))
+    if not expanded_terms:
+        logger.warning("LLM не вернул expansion terms.")
+        return []
+
+    # OR-запрос
+    tsquery_string = " | ".join(expanded_terms)
+    logger.info(f"BM25 tsquery: {tsquery_string}")
+
+    tsquery = func.to_tsquery('english', tsquery_string)
 
     stmt = (
         select(Chunk)
@@ -56,6 +81,39 @@ async def bm25_search(session: AsyncSession, question: str, limit: int = 100) ->
     result = await session.execute(stmt)
     chunks = result.scalars().all()
     return chunks
+
+
+def remove_stopwords(text: str) -> List[str]:
+    """
+    Удаляет очень частые стоп-слова (очень простой список для примера).
+    """
+    stopwords = {
+        "what", "is", "the", "a", "an", "of", "in", "on", "for", "and", "to", "with", "about", "which", "does", "can", "i"
+    }
+    tokens = [word.lower() for word in text.split()]
+    cleaned = [word for word in tokens if word not in stopwords]
+    return cleaned
+
+
+async def expand_query_terms_llm(text: str) -> List[str]:
+    """
+    Делает запрос в LLM для query expansion.
+    Получает список ключевых слов и синонимов через системный промпт.
+    """
+    logger.info("Calling LLM for query expansion")
+
+    prompt = QUERY_EXPANSION_PROMPT_TEMPLATE.format(question=text)
+    try:
+        response = await call_llm(prompt)
+        logger.debug(f"Raw LLM expansion response: {response}")
+
+        # Простейший парсинг ответа в список слов
+        terms = [term.strip() for term in response.replace(",", " ").split() if term.strip()]
+        return terms
+
+    except Exception as e:
+        logger.error(f"Error during query expansion LLM call: {e}")
+        return []
 
 
 async def embedding_rerank(question: str, bm25_chunks: List[Chunk], top_n: int = 10) -> List[Chunk]:
