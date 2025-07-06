@@ -51,7 +51,7 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
 async def bm25_search(session: AsyncSession, question: str, limit: int = 100) -> List[Chunk]:
     """
     Поиск в PostgreSQL по bm25_text.
-    Убираем стоп-слова и используем LLM для query expansion.
+    Использует LLM для rewriting и expansion.
     """
     # Удаляем стоп-слова
     cleaned_terms = remove_stopwords(question)
@@ -59,8 +59,16 @@ async def bm25_search(session: AsyncSession, question: str, limit: int = 100) ->
         logger.warning("После удаления стоп-слов ничего не осталось.")
         return []
 
-    # Query expansion через LLM
-    expanded_terms = await expand_query_terms_llm(" ".join(cleaned_terms))
+    # Шаг 1: Rewriting
+    rewritten_query = await rewrite_query_llm(" ".join(cleaned_terms))
+    logger.info(f"Rewritten query: {rewritten_query}")
+
+    if not rewritten_query:
+        logger.warning("LLM не вернул переписанный запрос.")
+        return []
+
+    # Шаг 2: Expansion
+    expanded_terms = await expand_query_terms_llm(rewritten_query)
     if not expanded_terms:
         logger.warning("LLM не вернул expansion terms.")
         return []
@@ -95,19 +103,38 @@ def remove_stopwords(text: str) -> List[str]:
     return cleaned
 
 
+async def rewrite_query_llm(question: str) -> str:
+    """
+    Делает запрос в LLM для переформулировки запроса.
+    """
+    from backend.prompts import QUERY_REWRITING_PROMPT_TEMPLATE
+
+    logger.info("Calling LLM for query rewriting")
+    prompt = QUERY_REWRITING_PROMPT_TEMPLATE.format(question=question)
+
+    try:
+        rewritten = await call_llm(prompt)
+        logger.debug(f"LLM rewritten query: {rewritten}")
+        return rewritten.strip()
+
+    except Exception as e:
+        logger.error(f"Error during query rewriting LLM call: {e}")
+        return question  # fallback: вернуть оригинальный
+
+
 async def expand_query_terms_llm(text: str) -> List[str]:
     """
-    Делает запрос в LLM для query expansion.
-    Получает список ключевых слов и синонимов через системный промпт.
+    Делает запрос в LLM для query expansion на основе переформулированного текста.
     """
-    logger.info("Calling LLM for query expansion")
+    from backend.prompts import QUERY_EXPANSION_PROMPT_TEMPLATE
 
+    logger.info("Calling LLM for query expansion")
     prompt = QUERY_EXPANSION_PROMPT_TEMPLATE.format(question=text)
+
     try:
         response = await call_llm(prompt)
         logger.debug(f"Raw LLM expansion response: {response}")
 
-        # Простейший парсинг ответа в список слов
         terms = [term.strip() for term in response.replace(",", " ").split() if term.strip()]
         return terms
 

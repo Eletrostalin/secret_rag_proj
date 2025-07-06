@@ -17,5 +17,5 @@ def generate_prompt(question: str, context: str) -> str:
         question=question.strip()
     )
 
-    logger.debug(f"Сформированный промпт (длина {len(prompt)} символов)")
+    logger.info(f"Полный сформированный промпт (длина {len(prompt)} символов):\n{prompt}")
     return prompt
