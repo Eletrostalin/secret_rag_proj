@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   backend:
     build:
@@ -22,7 +24,7 @@ services:
       - "7860"
 
   db:
-    image: postgres:16
+    image: ankane/pgvector:latest
     container_name: hipaa_db
     environment:
       POSTGRES_USER: nickstanchenkov
@@ -30,6 +32,7 @@ services:
       POSTGRES_DB: rag_hipaa
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
 
   nginx:
     image: nginx:latest

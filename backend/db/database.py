@@ -47,13 +47,15 @@ async def with_retries(
 
 # Создание таблиц
 async def init_db():
-    logger.info("Initializing database...")
+    logger.info("🟢 [init_db] Called: Starting database initialization process...")
     try:
         async with engine.begin() as conn:
+            logger.info("🟡 [init_db] Acquired connection. Running Base.metadata.create_all()...")
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("✅ Database initialized.")
+            logger.info("🟢 [init_db] Base.metadata.create_all() completed. Tables are ensured to exist.")
+        logger.info("✅ [init_db] Database initialization process finished successfully.")
     except SQLAlchemyError as e:
-        logger.error(f"Error initializing database: {e}")
+        logger.error(f"❌ [init_db] Error during database initialization: {e}")
         raise DatabaseError("Failed to initialize database.")
 
 

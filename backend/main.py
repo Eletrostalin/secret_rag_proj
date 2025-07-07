@@ -4,13 +4,11 @@ import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Импортируем только нужные роуты
 from backend.api.routes import ask, upload
-# from backend.api.routes import section  # Убрали, чтобы не падало при импорте
-
 from backend.ingestion.chunker import chunk_texts_to_chunks
 from backend.ingestion.parser import parse_pdf
 
+from backend.db.database import init_db
 
 # Глобальный формат и уровень
 logging.basicConfig(
@@ -49,6 +47,13 @@ app.include_router(upload.router, prefix="/upload", tags=["Upload"])
 @app.get("/health", tags=["Health"])
 async def health():
     return {"status": "ok"}
+
+
+# --- ДОБАВИЛИ: хук старта приложения для инициализации базы
+@app.on_event("startup")
+async def on_startup():
+    logging.info("Running DB init on startup (if needed)...")
+    await init_db()
 
 
 # Позволяет вызвать инициализацию БД вручную
