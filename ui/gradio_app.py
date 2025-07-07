@@ -8,7 +8,7 @@ def ask_question(question):
         return "❌ Введите вопрос."
 
     try:
-        response = requests.get(f"{BACKEND_URL}/ask/", params={"question": question}, timeout=60)
+        response = requests.get(f"{BACKEND_URL}/ask/", params={"question": question}, timeout=1800)
         if response.ok:
             data = response.json()
             return f"**Q:** {data.get('question')}\n\n**A:** {data.get('answer')}"
