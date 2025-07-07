@@ -1,7 +1,7 @@
 import gradio as gr
 import requests
 
-BACKEND_URL = "http://127.0.0.1:8000"
+BACKEND_URL = "http://backend:8000"
 
 def ask_question(question):
     if not question.strip():
@@ -25,7 +25,7 @@ def upload_pdf_file(file):
     try:
         with open(file.name, "rb") as f:
             files = {"file": (file.name, f, "application/pdf")}
-            response = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=120)
+            response = requests.post(f"{BACKEND_URL}/upload", files=files, timeout=300)
 
         if response.ok:
             data = response.json()

@@ -1,0 +1,55 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: hipaa_backend
+    volumes:
+      - ./backend:/app/backend
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./ui
+    container_name: hipaa_frontend
+    volumes:
+      - ./ui:/app
+    expose:
+      - "7860"
+
+  db:
+    image: postgres:16
+    container_name: hipaa_db
+    environment:
+      POSTGRES_USER: nickstanchenkov
+      POSTGRES_PASSWORD: 010125hipaa
+      POSTGRES_DB: rag_hipaa
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  nginx:
+    image: nginx:latest
+    container_name: hipaa_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+
+  ngrok:
+    image: wernight/ngrok
+    container_name: hipaa_ngrok
+    command: http nginx:80
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    depends_on:
+      - nginx
+
+volumes:
+  pg_data:

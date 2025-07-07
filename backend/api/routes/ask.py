@@ -5,6 +5,7 @@ from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import JSONResponse
 
 from backend.api.services.classifier import classify_request
+from backend.api.services.filter_chunks_via_llm import filter_chunks_via_llm
 from backend.api.services.retrieval import retrieve_top_chunks
 from backend.api.services.context_builder import build_context
 from backend.api.services.prompt_engineering import generate_prompt
@@ -39,10 +40,29 @@ async def ask_endpoint(question: str):
             return JSONResponse(content={"answer": "No relevant sections found.", "question": question, "mode": mode})
 
         if mode == "QUOTE":
-            logger.info("QUOTE mode detected — returning verbatim sections.")
-            quoted_text = "\n\n".join(
-                f"§ {c.section_number} ({c.part_number})\n{c.text}" for c in top_chunks
+            logger.info("QUOTE mode detected — starting filter step.")
+
+            # Вызываем фильтрацию через LLM
+            selected_numbers = await filter_chunks_via_llm(
+                question=question,
+                top_chunks=[c.text for c in top_chunks]
             )
+            logger.info(f"filter_chunks_via_llm returned indices: {selected_numbers}")
+
+            if not selected_numbers:
+                logger.warning("No matching chunks selected after filtering.")
+                return JSONResponse(content={
+                    "answer": "No direct legal text found matching your request.",
+                    "question": question,
+                    "mode": mode
+                })
+
+            # Возвращаем только выбранные chunks
+            selected_chunks = [top_chunks[i - 1] for i in selected_numbers if 0 < i <= len(top_chunks)]
+            quoted_text = "\n\n".join(
+                f"§ {c.section_number} ({c.part_number})\n{c.text.strip()}" for c in selected_chunks
+            )
+
             return JSONResponse(content={"answer": quoted_text, "question": question, "mode": mode})
 
         # 2️⃣ Context building
@@ -69,5 +89,5 @@ async def ask_endpoint(question: str):
         return JSONResponse(content={"answer": answer, "question": question, "mode": mode})
 
     except Exception as e:
-        logger.error(f"Error in /ask endpoint: {e}")
+        logger.error(f"Error in /ask endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

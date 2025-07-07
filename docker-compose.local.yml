@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    container_name: hipaa_backend
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./ui
+    container_name: hipaa_frontend
+    volumes:
+      - ./ui:/app
+    ports:
+      - "7860:7860"
+
+  db:
+    image: postgres:16
+    container_name: hipaa_db
+    environment:
+      POSTGRES_USER: nickstanchenkov
+      POSTGRES_PASSWORD: 010125hipaa
+      POSTGRES_DB: rag_hipaa
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:

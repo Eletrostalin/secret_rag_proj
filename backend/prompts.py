@@ -44,3 +44,13 @@ CLASSIFICATION_SYSTEM_PROMPT = (
     "User: \"Quote the exact text about disclosure to law enforcement\"\n"
     "Answer: QUOTE\n"
 )
+
+
+FILTER_SYSTEM_PROMPT = (
+    "You are a legal assistant. Your task is to read the numbered list of HIPAA regulation text fragments (chunks) below.\n"
+    "Identify ONLY those fragments that specifically and directly contain the requested regulation details in full text.\n\n"
+    "INSTRUCTIONS:\n"
+    "- Return ONLY the numbers of the relevant chunks, separated by commas, no spaces.\n"
+    "- If none of the chunks match, return an empty string.\n"
+    "- Do not return any text other than the numbers.\n"
+)

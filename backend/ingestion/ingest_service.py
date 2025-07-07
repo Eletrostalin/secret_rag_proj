@@ -1,10 +1,10 @@
 import logging
 from backend.ingestion.parser import parse_pdf
 from backend.ingestion.chunker import chunk_texts_to_chunks
-from backend.db.database import save_chunks, async_session, get_chunks_without_embeddings, save_embeddings
+from backend.db.database import async_session, get_chunks_without_embeddings, save_embeddings, with_retries
 from backend.db.indexer import add_bm25_index
 from backend.ingestion.embedder import embed_batch
-
+from backend.db.database import save_chunks
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -46,8 +46,8 @@ async def ingest_pdf_file(pdf_path: str) -> int:
 
     # Шаг 3: Сохранение чанков в БД
     try:
-        logger.info("🚀 Step 3: Saving chunks to DB...")
-        await save_chunks(chunks)
+        logger.info("🚀 Step 3: Saving chunks to DB with retries...")
+        await with_retries(save_chunks, chunks)
         logger.info(f"✅ {len(chunks)} chunks successfully saved to DB.")
     except Exception as e:
         logger.error(f"❌ Ошибка при сохранении чанков в БД: {e}")
@@ -57,7 +57,7 @@ async def ingest_pdf_file(pdf_path: str) -> int:
     try:
         logger.info("🚀 Step 4: Generating and saving embeddings...")
         async with async_session() as session:
-            chunks_to_embed = await get_chunks_without_embeddings(session)
+            chunks_to_embed = await with_retries(get_chunks_without_embeddings, session)
             logger.info(f"Chunks needing embeddings: {len(chunks_to_embed)}")
 
             if chunks_to_embed:
@@ -67,7 +67,7 @@ async def ingest_pdf_file(pdf_path: str) -> int:
                 logger.debug(f"Generated embeddings: {vectors[:2]}")
 
                 chunks_with_vectors = list(zip(chunks_to_embed, vectors))
-                await save_embeddings(session, chunks_with_vectors)
+                await with_retries(save_embeddings, session, chunks_with_vectors)
                 logger.info(f"✅ Embeddings added for {len(chunks_with_vectors)} chunks.")
             else:
                 logger.info("✅ No chunks needed embeddings.")
@@ -77,9 +77,9 @@ async def ingest_pdf_file(pdf_path: str) -> int:
 
     # Шаг 5: Индексация BM25
     try:
-        logger.info("🚀 Step 5: Creating BM25 index...")
+        logger.info("🚀 Step 5: Creating BM25 index with retries...")
         async with async_session() as session:
-            await add_bm25_index(session)
+            await with_retries(add_bm25_index, session)
             logger.info("✅ BM25 indexing complete.")
     except Exception as e:
         logger.error(f"❌ Ошибка на этапе индексации BM25: {e}")
