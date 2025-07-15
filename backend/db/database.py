@@ -59,12 +59,6 @@ async def init_db():
         raise DatabaseError("Failed to initialize database.")
 
 
-# Dependency для FastAPI
-async def get_db() -> AsyncSession:
-    async with async_session() as session:
-        yield session
-
-
 # Сохранение чанков
 async def save_chunks(chunks: List[ChunkData]):
     logger.info(f"Saving {len(chunks)} chunks to DB...")

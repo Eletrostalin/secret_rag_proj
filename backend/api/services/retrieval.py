@@ -8,7 +8,8 @@ from backend.api.services.llm_client import call_llm
 from backend.db.database import async_session
 from backend.db.models import Chunk
 from backend.ingestion.embedder import embed_text
-from backend.prompts import QUERY_EXPANSION_PROMPT_TEMPLATE
+from backend.prompts import QUERY_EXPANSION_PROMPT_TEMPLATE, QUERY_REWRITING_PROMPT_TEMPLATE
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -35,7 +36,7 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
         # Fallback: загрузить все
         result = await session.execute(select(Chunk))
         bm25_chunks = result.scalars().all()
-        logger.info(f"Fallback взял {len(bm25_chunks)} всех чанков из БД.")
+        logger.info(f"⚠️ Fallback-режим: загружено {len(bm25_chunks)} всех чанков из БД для дальнейшего rerank.")
 
         if not bm25_chunks:
             logger.error("Вообще нет данных в таблице chunks!")
@@ -107,7 +108,6 @@ async def rewrite_query_llm(question: str) -> str:
     """
     Делает запрос в LLM для переформулировки запроса.
     """
-    from backend.prompts import QUERY_REWRITING_PROMPT_TEMPLATE
 
     logger.info("Calling LLM for query rewriting")
     prompt = QUERY_REWRITING_PROMPT_TEMPLATE.format(question=question)
@@ -126,7 +126,6 @@ async def expand_query_terms_llm(text: str) -> List[str]:
     """
     Делает запрос в LLM для query expansion на основе переформулированного текста.
     """
-    from backend.prompts import QUERY_EXPANSION_PROMPT_TEMPLATE
 
     logger.info("Calling LLM for query expansion")
     prompt = QUERY_EXPANSION_PROMPT_TEMPLATE.format(question=text)

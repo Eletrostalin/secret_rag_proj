@@ -1,3 +1,7 @@
+
+
+
+
 import json
 import logging
 from typing import List
@@ -110,44 +114,44 @@ def call_llm_for_chunk(chunk_text: str, retries=2) -> List[ChunkData]:
     return []
 
 
-def chunk_pages_llm(pages: List[str]) -> List[ChunkData]:
-    """
-    Обрабатывает список страниц PDF.
-    Каждую длинную страницу делит на блоки ≤ 2000 символов.
-    Для каждого блока вызывает модель.
-    Подставляет последний найденный part_number и subpart, если модель вернула null.
-    """
-    all_chunks = []
-    last_part = None
-    last_subpart = None
-
-    for page_number, page in enumerate(pages, start=1):
-        logger.info(f"[LLM] Обрабатываем страницу {page_number} из {len(pages)}")
-
-        # Чистим и режем страницу на блоки
-        cleaned_page = clean_text(page)
-        blocks = split_into_chunks(cleaned_page)
-
-        logger.info(f"[LLM] Страница {page_number} разделена на {len(blocks)} блоков")
-
-        for block_number, block in enumerate(blocks, start=1):
-            logger.info(f"[LLM] Блок {block_number}/{len(blocks)} на странице {page_number}")
-
-            chunk_results = call_llm_for_chunk(block)
-            logger.info(f"[LLM] Получено чанков: {len(chunk_results)}")
-
-            for chunk in chunk_results:
-                if chunk.part_number:
-                    last_part = chunk.part_number
-                else:
-                    chunk.part_number = last_part
-
-                if chunk.subpart:
-                    last_subpart = chunk.subpart
-                else:
-                    chunk.subpart = last_subpart
-
-            all_chunks.extend(chunk_results)
-
-    logger.info(f"[LLM] Всего чанков получено: {len(all_chunks)}")
-    return all_chunks
+# def chunk_pages_llm(pages: List[str]) -> List[ChunkData]:
+#     """
+#     Обрабатывает список страниц PDF.
+#     Каждую длинную страницу делит на блоки ≤ 2000 символов.
+#     Для каждого блока вызывает модель.
+#     Подставляет последний найденный part_number и subpart, если модель вернула null.
+#     """
+#     all_chunks = []
+#     last_part = None
+#     last_subpart = None
+#
+#     for page_number, page in enumerate(pages, start=1):
+#         logger.info(f"[LLM] Обрабатываем страницу {page_number} из {len(pages)}")
+#
+#         # Чистим и режем страницу на блоки
+#         cleaned_page = clean_text(page)
+#         blocks = split_into_chunks(cleaned_page)
+#
+#         logger.info(f"[LLM] Страница {page_number} разделена на {len(blocks)} блоков")
+#
+#         for block_number, block in enumerate(blocks, start=1):
+#             logger.info(f"[LLM] Блок {block_number}/{len(blocks)} на странице {page_number}")
+#
+#             chunk_results = call_llm_for_chunk(block)
+#             logger.info(f"[LLM] Получено чанков: {len(chunk_results)}")
+#
+#             for chunk in chunk_results:
+#                 if chunk.part_number:
+#                     last_part = chunk.part_number
+#                 else:
+#                     chunk.part_number = last_part
+#
+#                 if chunk.subpart:
+#                     last_subpart = chunk.subpart
+#                 else:
+#                     chunk.subpart = last_subpart
+#
+#             all_chunks.extend(chunk_results)
+#
+#     logger.info(f"[LLM] Всего чанков получено: {len(all_chunks)}")
+#     return all_chunks

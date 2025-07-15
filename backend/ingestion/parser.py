@@ -1,4 +1,6 @@
+import asyncio
 import json
+import traceback
 
 from PyPDF2 import PdfReader, PdfWriter
 import pdfplumber
@@ -23,40 +25,6 @@ def remove_title_pages(input_path: str, output_path: str, skip_pages: int = 9):
         writer.write(f)
 
     logger.info(f"Удалены первые {skip_pages} страниц. Сохранено в {output_path}.")
-
-
-def remove_watermark(input_path: str, output_path: str, watermark_lines=None):
-    """
-    Удаляет строки с водяными знаками с каждой страницы текста.
-    """
-    if watermark_lines is None:
-        watermark_lines = [
-            "HIPAA Administrative Simplification Regulation Text",
-            "March 2013"
-        ]
-
-    reader = pdfplumber.open(input_path)
-    writer = PdfWriter()
-
-    for i, page in enumerate(reader.pages):
-        text = page.extract_text()
-        if not text:
-            continue
-
-        # Удаляем строки с водяными знаками
-        lines = text.splitlines()
-        cleaned_lines = [
-            line for line in lines
-            if all(wm.lower() not in line.lower() for wm in watermark_lines)
-        ]
-
-        cleaned_text = "\n".join(cleaned_lines)
-
-        # Пока просто выводим очищенный текст в лог
-        logger.debug(f"Страница {i+1} очищенный текст:\n{cleaned_text}\n")
-
-    reader.close()
-    logger.info(f"Удаление водяных знаков завершено для {input_path}")
 
 
 def detect_page_types(pdf_path: str):
@@ -158,9 +126,9 @@ def split_index_page_columns(page, threshold_left=180, threshold_right=300):
     }
 
 
-def clean_index_columns_watermark(columns: dict, watermark_lines=None) -> dict:
+def remove_watermark_lines(text: str, watermark_lines=None) -> str:
     """
-    Удаляет watermark-строки из всех колонок.
+    Удаляет строки, содержащие любые из watermark_lines, из текста.
     """
     if watermark_lines is None:
         watermark_lines = [
@@ -168,18 +136,12 @@ def clean_index_columns_watermark(columns: dict, watermark_lines=None) -> dict:
             "March 2013"
         ]
 
-    def clean_text(text):
-        lines = text.splitlines()
-        return "\n".join(
-            line for line in lines
-            if all(wm.lower() not in line.lower() for wm in watermark_lines)
-        )
-
-    return {
-        "left": clean_text(columns.get("left", "")),
-        "center": clean_text(columns.get("center", "")),
-        "right": clean_text(columns.get("right", ""))
-    }
+    lines = text.splitlines()
+    cleaned_lines = [
+        line for line in lines
+        if all(wm.lower() not in line.lower() for wm in watermark_lines)
+    ]
+    return "\n".join(cleaned_lines)
 
 
 def merge_index_columns(columns: dict) -> str:
@@ -237,70 +199,86 @@ def clean_normal_page(text: str) -> str:
     return "\n\n".join(paragraphs)
 
 
-def process_normal_page_columns(page) -> str:
-    columns = split_index_page_columns(page)
-    cleaned_columns = clean_index_columns_watermark(columns)
-    merged_text = merge_index_columns(cleaned_columns)
-
-    # Новая строка: лог сразу после склеивания трех колонок
-    #logger.info(f"[Обычная страница - текст после склеивания колонок до нормализации]\n{merged_text}\n")
-
-    normalized_text = clean_normal_page(merged_text)
-    return normalized_text
-
-
-def parse_pdf(input_path: str, working_path: str):
+async def parse_pdf(input_path: str, working_path: str):
     """
-    Полный пайплайн парсинга:
+    Асинхронный пайплайн парсинга:
     - Удаление титульных страниц
-    - Удаление водяных знаков
     - Классификация страниц
-    - Для индекс-страниц: деление на колонки, очистка watermark, удаление Contents/Source, нормализация
-    - Для обычных страниц: деление на колонки, очистка watermark, нормализация
+    - Обработка страниц через split -> merge -> remove watermark -> clean
     - Возвращает список обработанных страниц в виде текста
     """
-    logger.info("Шаг 1: Удаление титульных страниц...")
-    remove_title_pages(input_path, working_path)
+    logger.info("🟢 Шаг 1: Удаление титульных страниц...")
+    await asyncio.to_thread(remove_title_pages, input_path, working_path)
 
-    logger.info("Шаг 2: Удаление водяных знаков...")
-    remove_watermark(working_path, working_path)
+    logger.info("🟢 Шаг 2: Классификация страниц (индекс / обычные)...")
+    index_pages, normal_pages = await asyncio.to_thread(detect_page_types, working_path)
 
-    logger.info("Шаг 3: Классификация страниц (индекс / обычные)...")
-    index_pages, normal_pages = detect_page_types(working_path)
+    total_index = len(index_pages)
+    total_normal = len(normal_pages)
 
-    logger.info(f"Найдено индекс-страниц: {len(index_pages)}")
-    logger.info(f"Найдено обычных страниц: {len(normal_pages)}")
+    logger.info(f"✅ Найдено индекс-страниц: {total_index}")
+    logger.info(f"✅ Найдено обычных страниц: {total_normal}")
 
     processed_texts = []
 
-    with pdfplumber.open(working_path) as reader:
-        # Обработка индекс-страниц
-        for idx, _ in index_pages:
+    reader = await asyncio.to_thread(pdfplumber.open, working_path)
+
+    # 🔵 Обработка индекс-страниц с прогрессом
+    for i, (idx, _) in enumerate(index_pages, start=1):
+        try:
             page = reader.pages[idx - 1]
-            columns = split_index_page_columns(page)
-            cleaned_columns = clean_index_columns_watermark(columns)
-            merged_text = merge_index_columns(cleaned_columns)
-            #logger.debug(f"[Индекс-страница {idx} склеенный текст до удаления блоков]\n{merged_text}\n")
 
-            cleaned_final_text = clean_index_page_text(merged_text)
-            normalized_final_text = clean_normal_page(cleaned_final_text)
-            #logger.info(f"[Индекс-страница {idx} итоговый текст после обработки]\n{normalized_final_text}\n")
+            if page.extract_tables():
+                logger.info(f"⚠️ [Индексная] Пропущена страница {idx} — обнаружена таблица")
+                continue
 
-            processed_texts.append(normalized_final_text)
+            columns = await asyncio.to_thread(split_index_page_columns, page)
+            merged = await asyncio.to_thread(merge_index_columns, columns)
+            text_no_watermark = remove_watermark_lines(merged)
 
-        # Обработка обычных страниц
-        for idx, _ in normal_pages:
+            # Специфичная очистка для индексных страниц
+            cleaned = clean_index_page_text(text_no_watermark)
+            normalized = clean_normal_page(cleaned)
+
+            processed_texts.append(normalized)
+
+            if i % 10 == 0 or i == total_index:
+                percent = (i / total_index) * 100
+                logger.info(f"📈 [Индексные страницы] Прогресс: {i}/{total_index} ({percent:.1f}%)")
+
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка при обработке ИНДЕКСНОЙ страницы {idx}: {e}\n{traceback.format_exc()}"
+            )
+
+    # 🟢 Обработка обычных страниц с прогрессом
+    for i, (idx, _) in enumerate(normal_pages, start=1):
+        try:
             page = reader.pages[idx - 1]
-            processed_normal = process_normal_page_columns(page)
-            #logger.info(f"[Обычная страница {idx} итоговый текст после обработки]\n{processed_normal}\n")
 
-            processed_texts.append(processed_normal)
+            if page.extract_tables():
+                logger.info(f"⚠️ [Обычная] Пропущена страница {idx} — обнаружена таблица")
+                continue
 
-    logger.info("=== ОБЩИЙ СПИСОК ОБРАБОТАННЫХ СТРАНИЦ ===")
-  #  for i, text in enumerate(processed_texts, start=1):
-   #     logger.info(f"[Страница {i}]\n{text}\n")
+            columns = await asyncio.to_thread(split_index_page_columns, page)
+            merged = await asyncio.to_thread(merge_index_columns, columns)
+            text_no_watermark = remove_watermark_lines(merged)
 
-    logger.info("Парсинг завершён.")
+            # Обычные страницы не нуждаются в clean_index_page_text
+            normalized = clean_normal_page(text_no_watermark)
+
+            processed_texts.append(normalized)
+
+            if i % 10 == 0 or i == total_normal:
+                percent = (i / total_normal) * 100
+                logger.info(f"📈 [Обычные страницы] Прогресс: {i}/{total_normal} ({percent:.1f}%)")
+
+        except Exception as e:
+            logger.error(
+                f"❌ Ошибка при обработке ОБЫЧНОЙ страницы {idx}: {e}\n{traceback.format_exc()}"
+            )
+
+    logger.info("🎯 Парсинг PDF завершён успешно!")
     return processed_texts
 
 
