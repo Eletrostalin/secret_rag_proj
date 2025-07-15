@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from backend.ingestion.parser import parse_pdf
 from backend.ingestion.chunker import chunk_texts_to_chunks

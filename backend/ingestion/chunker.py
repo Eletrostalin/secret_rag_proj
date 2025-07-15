@@ -1,7 +1,9 @@
+import logging
 import re
 from typing import List
 from backend.db.schemas import ChunkData
 
+logger = logging.getLogger(__name__)
 
 def get_part_from_section_number(section_number: str) -> str:
     """
@@ -77,21 +79,25 @@ def split_into_sections_from_pages(pages: List[str]) -> List[dict]:
     """
     Делит список страниц на секции по признаку '§'.
     """
+    logger.info(f"split_into_sections_from_pages — получено страниц: {len(pages)}")
 
     all_sections = []
 
-    for page_text in pages:
+    for i, page_text in enumerate(pages):
+        logger.debug(f"Processing page {i} with length {len(page_text)}")
+
         sections = split_by_sections(page_text)
+        logger.info(f"Page {i}: найдено секций {len(sections)}")
 
         for section in sections:
             part_number = get_part_from_section_number(section["section_number"])
             section.update({
                 "part_number": part_number,
-                # "subpart": current_subpart,
                 "cross_references": []
             })
             all_sections.append(section)
 
+    logger.info(f"split_into_sections_from_pages — всего секций на выходе: {len(all_sections)}")
     return all_sections
 
 

@@ -279,7 +279,23 @@ async def parse_pdf(input_path: str, working_path: str):
             )
 
     logger.info("🎯 Парсинг PDF завершён успешно!")
-    return processed_texts
+    final_pages = []
+    buffer = ""
+
+    for page in processed_texts:
+        if buffer:
+            buffer += "\n\n" + page
+        else:
+            buffer = page
+
+        if page.strip().endswith("]"):
+            final_pages.append(buffer)
+            buffer = ""
+
+    if buffer:
+        final_pages.append(buffer)
+
+    return final_pages
 
 
 if __name__ == "__main__":

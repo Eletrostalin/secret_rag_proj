@@ -20,7 +20,7 @@ async def main():
     working_pdf = sys.argv[2]
 
     # Шаг 1
-    pages = parse_pdf(input_pdf, working_pdf)
+    pages = await parse_pdf(input_pdf, working_pdf)
     if pages is None:
         logging.error("Парсер вернул None.")
         raise ValueError("Parsing failed: no pages returned.")
