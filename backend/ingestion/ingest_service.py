@@ -21,7 +21,7 @@ async def ingest_pdf_file(pdf_path: str) -> int:
     # Шаг 1: Парсинг PDF
     try:
         logger.info("🚀 Step 1: Parsing PDF...")
-        pages = parse_pdf(pdf_path, pdf_path)
+        pages = await parse_pdf(pdf_path, pdf_path)
         if not pages:
             raise ValueError("PDF парсинг вернул пустой результат.")
         logger.info(f"✅ Parsing complete. Total pages: {len(pages)}")
@@ -63,7 +63,7 @@ async def ingest_pdf_file(pdf_path: str) -> int:
             if chunks_to_embed:
                 texts = [chunk.text for chunk in chunks_to_embed]
                 logger.debug(f"Texts for embedding (first 2): {[t[:100] for t in texts[:2]]}")
-                vectors = embed_batch(texts)
+                vectors = await asyncio.to_thread(embed_batch, texts)
                 logger.debug(f"Generated embeddings: {vectors[:2]}")
 
                 chunks_with_vectors = list(zip(chunks_to_embed, vectors))

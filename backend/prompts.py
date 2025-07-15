@@ -54,3 +54,10 @@ FILTER_SYSTEM_PROMPT = (
     "- If none of the chunks match, return an empty string.\n"
     "- Do not return any text other than the numbers.\n"
 )
+
+
+FILTER_USER_PROMPT_TEMPLATE = (
+    "QUESTION: {question}\n\n"
+    "CHUNKS:\n{chunks}\n\n"
+    "INSTRUCTIONS: Identify which chunks contain the exact legal regulation text answering the question."
+)

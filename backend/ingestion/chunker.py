@@ -2,20 +2,6 @@ import re
 from typing import List
 from backend.db.schemas import ChunkData
 
-# def extract_part_number(text: str) -> str | None:
-#     """
-#     Извлекает номер PART из текста страницы.
-#     Ищет строку, начинающуюся с "PART", например "PART 160".
-#     Возвращает строку вида "Part 160" или None, если не найдено.
-#     """
-#     for line in text.splitlines():
-#         line = line.strip().upper()
-#         if line.startswith("PART"):
-#             match = re.match(r"PART\s*(\d+)", line)
-#             if match:
-#                 return f"Part {match.group(1)}"
-#     return None
-
 
 def get_part_from_section_number(section_number: str) -> str:
     """
@@ -27,33 +13,11 @@ def get_part_from_section_number(section_number: str) -> str:
         return f"Part {match.group(1)}"
     return "UNKNOWN"
 
-# def extract_subpart(text: str) -> str | None:
-#     """
-#     Извлекает название SUBPART из текста страницы.
-#     Ищет строку, начинающуюся с "SUBPART".
-#     Возвращает полную строку, например "Subpart A—General Provisions", или None.
-#     """
-#     for line in text.splitlines():
-#         line = line.strip()
-#         if line.upper().startswith("SUBPART"):
-#             return line
-#     return None
-
-
-def is_caps_title(line: str, threshold: float = 0.6) -> bool:
-    """
-    Проверяет, является ли строка капс-заголовком.
-    threshold — минимальная доля заглавных букв.
-    """
-    letters = [c for c in line if c.isalpha()]
-    if not letters:
-        return False
-    upper = sum(1 for c in letters if c.isupper())
-    ratio = upper / len(letters)
-    return ratio >= threshold
-
 
 def split_by_sections(text: str) -> List[dict]:
+    """
+    Делит текст одной страницы на секции по символу '§'.
+    """
     sections = []
     lines = text.splitlines()
     current_section_lines = []
@@ -110,20 +74,13 @@ def split_by_sections(text: str) -> List[dict]:
 
 
 def split_into_sections_from_pages(pages: List[str]) -> List[dict]:
+    """
+    Делит список страниц на секции по признаку '§'.
+    """
+
     all_sections = []
 
-    # current_part_number = None
-    # current_subpart = None
-
     for page_text in pages:
-        # part_number = extract_part_number(page_text)
-        # subpart = extract_subpart(page_text)
-
-        # if part_number:
-        #     current_part_number = part_number
-        # if subpart:
-        #     current_subpart = subpart
-
         sections = split_by_sections(page_text)
 
         for section in sections:
