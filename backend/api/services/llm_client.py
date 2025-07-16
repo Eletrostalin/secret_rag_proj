@@ -72,7 +72,7 @@ async def call_llm(prompt: str, model: str = None) -> str:
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": user_content}
             ],
-            temperature=0.2
+            temperature=0.0
         )
         return response.choices[0].message.content.strip()
 

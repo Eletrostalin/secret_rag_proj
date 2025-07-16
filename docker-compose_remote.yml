@@ -50,11 +50,13 @@ services:
     build:
       context: ./ngrok
     container_name: hipaa_ngrok
-    command: ["http", "nginx:80"]
+    command: [ "http", "nginx:80", "--log=stdout", "--log-format=json" ]
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
     depends_on:
       - nginx
+    ports:
+      - "4040:4040"
 
 volumes:
   pg_data:
