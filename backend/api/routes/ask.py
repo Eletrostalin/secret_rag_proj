@@ -1,11 +1,11 @@
 import logging
 import time
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from backend.api.services.classifier import classify_request
-from backend.api.services.filter_chunks_via_llm import filter_chunks_via_llm
+from backend.api.services.quote_handler import handle_quote_request
 from backend.api.services.retrieval import retrieve_top_chunks
 from backend.api.services.context_builder import build_context
 from backend.api.services.prompt_engineering import generate_prompt
@@ -26,9 +26,20 @@ async def ask_endpoint(question: str):
 
         # 0️⃣ Классификация
         classification_start = time.time()
-        mode = await classify_request(question)
+        result = await classify_request(question)
+        mode = result["mode"]
+        section = result["target_section"]
         classification_duration = time.time() - classification_start
-        logger.info(f"Classification result: {mode} (took {classification_duration:.2f}s)")
+        logger.info(f"Classification: mode={mode}, section={section} (took {classification_duration:.2f}s)")
+
+        # 🔁 QUOTE mode (возможно, с номером параграфа)
+        if mode == "QUOTE":
+            quote_start = time.time()
+            quote_answer = await handle_quote_request(question, section)
+            quote_duration = time.time() - quote_start
+            logger.info(f"QUOTE handler completed in {quote_duration:.2f}s")
+
+            return JSONResponse(content={"answer": quote_answer, "question": question, "mode": "QUOTE"})
 
         # 1️⃣ Retrieval
         retrieval_start = time.time()
@@ -37,33 +48,9 @@ async def ask_endpoint(question: str):
         logger.info(f"Retrieved {len(top_chunks)} chunks in {retrieval_duration:.2f}s")
 
         if not top_chunks:
-            return JSONResponse(content={"answer": "No relevant sections found.", "question": question, "mode": mode})
-
-        if mode == "QUOTE":
-            logger.info("QUOTE mode detected — starting filter step.")
-
-            # Вызываем фильтрацию через LLM
-            selected_numbers = await filter_chunks_via_llm(
-                question=question,
-                top_chunks=[c.text for c in top_chunks]
+            return JSONResponse(
+                content={"answer": "No relevant sections found.", "question": question, "mode": "NORMAL"}
             )
-            logger.info(f"filter_chunks_via_llm returned indices: {selected_numbers}")
-
-            if not selected_numbers:
-                logger.warning("No matching chunks selected after filtering.")
-                return JSONResponse(content={
-                    "answer": "No direct legal text found matching your request.",
-                    "question": question,
-                    "mode": mode
-                })
-
-            # Возвращаем только выбранные chunks
-            selected_chunks = [top_chunks[i - 1] for i in selected_numbers if 0 < i <= len(top_chunks)]
-            quoted_text = "\n\n".join(
-                f"§ {c.section_number} ({c.part_number})\n{c.text.strip()}" for c in selected_chunks
-            )
-
-            return JSONResponse(content={"answer": quoted_text, "question": question, "mode": mode})
 
         # 2️⃣ Context building
         context_start = time.time()
@@ -86,7 +73,7 @@ async def ask_endpoint(question: str):
         total_duration = time.time() - total_start
         logger.info(f"Total /ask duration: {total_duration:.2f}s")
 
-        return JSONResponse(content={"answer": answer, "question": question, "mode": mode})
+        return JSONResponse(content={"answer": answer, "question": question, "mode": "NORMAL"})
 
     except Exception as e:
         logger.error(f"Error in /ask endpoint: {e}", exc_info=True)

@@ -33,16 +33,23 @@ QUERY_EXPANSION_PROMPT_TEMPLATE = (
 
 CLASSIFICATION_SYSTEM_PROMPT = (
     "You are an expert legal question classifier. Your task is to decide if a user's question needs either:\n\n"
-    "- \"NORMAL\": The question asks for an answer or explanation based on the legal text.\n"
-    "- \"QUOTE\": The question explicitly requests *verbatim* legal text or sections to be cited in full.\n\n"
-    "Rules:\n"
-    "- Return only one word: either NORMAL or QUOTE.\n"
-    "- No explanation. No commentary.\n\n"
+    "- \"NORMAL\": The question asks for an explanation or general answer based on legal text.\n"
+    "- \"QUOTE\": The question explicitly requests *verbatim* legal text or specific section(s).\n\n"
+    "Additionally, if the question includes a reference to a specific regulation section (e.g., § 164.102), extract and return the section number.\n"
+    "Use the following format:\n\n"
+    "- If the question is NORMAL: return `NORMAL`\n"
+    "- If the question is QUOTE but has NO section number: return `QUOTE`\n"
+    "- If the question is QUOTE and HAS a section number: return `QUOTE <section>` (e.g., `QUOTE 164.102`)\n\n"
+    "Do not explain your answer.\n\n"
     "Examples:\n"
-    "User: \"What is HIPAA Part 160 about?\"\n"
+    "User: \"What is the overall purpose of HIPAA Part 160?\"\n"
     "Answer: NORMAL\n\n"
     "User: \"Quote the exact text about disclosure to law enforcement\"\n"
-    "Answer: QUOTE\n"
+    "Answer: QUOTE\n\n"
+    "User: \"§ 164.102\"\n"
+    "Answer: QUOTE 164.102\n\n"
+    "User: \"Can you cite section 164.510?\"\n"
+    "Answer: QUOTE 164.510\n"
 )
 
 
