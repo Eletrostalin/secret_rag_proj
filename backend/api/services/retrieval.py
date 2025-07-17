@@ -49,7 +49,7 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
     return top_chunks
 
 
-async def bm25_search(session: AsyncSession, question: str, limit: int = 100) -> List[Chunk]:
+async def bm25_search(session: AsyncSession, question: str, limit: int = 80) -> List[Chunk]:
     """
     Поиск в PostgreSQL по bm25_text.
     Использует LLM для rewriting и expansion.
@@ -142,7 +142,7 @@ async def expand_query_terms_llm(text: str) -> List[str]:
         return []
 
 
-async def embedding_rerank(question: str, bm25_chunks: List[Chunk], top_n: int = 5) -> List[Chunk]:
+async def embedding_rerank(question: str, bm25_chunks: List[Chunk], top_n: int = 10) -> List[Chunk]:
     """
     Семантический rerank: сортировка по cosine similarity.
     """

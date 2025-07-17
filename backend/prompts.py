@@ -68,3 +68,18 @@ FILTER_USER_PROMPT_TEMPLATE = (
     "CHUNKS:\n{chunks}\n\n"
     "INSTRUCTIONS: Identify which chunks contain the exact legal regulation text answering the question."
 )
+
+
+RERANK_SYSTEM_PROMPT = """You are a legal assistant helping rank legal text chunks based on relevance to the user’s question.
+Return the numbers of chunks in descending order of relevance, comma-separated.
+Do not explain your reasoning.
+"""
+
+RERANK_USER_PROMPT_TEMPLATE = """QUESTION: {question}
+
+CHUNKS:
+{chunks}
+
+INSTRUCTIONS:
+Return the chunk numbers ordered from most to least relevant, comma-separated. Example: "3,1,5,2"
+"""

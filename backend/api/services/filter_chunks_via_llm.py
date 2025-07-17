@@ -1,7 +1,8 @@
 import logging
 from typing import List
 from backend.api.services.llm_client import call_llm
-from backend.prompts import FILTER_SYSTEM_PROMPT, FILTER_USER_PROMPT_TEMPLATE
+from backend.prompts import FILTER_SYSTEM_PROMPT, FILTER_USER_PROMPT_TEMPLATE, RERANK_USER_PROMPT_TEMPLATE, \
+    RERANK_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -54,4 +55,38 @@ async def filter_chunks_via_llm(question: str, top_chunks: List[str]) -> List[in
 
     except Exception as e:
         logger.error(f"Ошибка в filter_chunks_via_llm: {e}", exc_info=True)
+        return []
+
+
+async def rerank_chunks_via_llm(question: str, top_chunks: List[str]) -> List[int]:
+    try:
+        logger.info("=== Начало rerank чанков через LLM ===")
+        logger.info(f"Вопрос пользователя: {question}")
+        logger.info(f"Кандидатов для rerank: {len(top_chunks)}")
+
+        numbered_chunks_lines = [f"{i+1}. {c.strip()}" for i, c in enumerate(top_chunks)]
+        numbered_chunks_text = "\n\n".join(numbered_chunks_lines)
+
+        user_prompt = RERANK_USER_PROMPT_TEMPLATE.format(question=question, chunks=numbered_chunks_text)
+        full_prompt = f"{RERANK_SYSTEM_PROMPT}\n\n{user_prompt}"
+
+        logger.debug(f"Промпт для rerank (обрезан):\n{full_prompt[:2000]}")
+
+        response = await call_llm(full_prompt)
+        logger.info(f"Ответ LLM (сырой): '{response}'")
+
+        result = []
+        if response.strip():
+            for part in response.strip().split(","):
+                part = part.strip()
+                if part.isdigit():
+                    result.append(int(part))
+                else:
+                    logger.warning(f"Непарсибельная часть: '{part}'")
+
+        logger.info(f"Финальный порядок чанков: {result}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Ошибка в rerank_chunks_via_llm: {e}", exc_info=True)
         return []
