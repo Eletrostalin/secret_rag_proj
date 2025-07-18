@@ -24,8 +24,12 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
         async with async_session() as session:
             return await retrieve_top_chunks(question, session)
 
-    # 1️⃣ BM25 Retrieval
-    bm25_chunks = await bm25_search(session, question)
+    # 🔁 Переписываем запрос для embedding
+    rewritten_query = await rewrite_query_llm(question)
+    logger.info(f"Rewritten query for embedding: {rewritten_query}")
+
+    # 1️⃣ BM25 Retrieval (использует expansion внутри)
+    bm25_chunks = await bm25_search(session, rewritten_query)
     logger.info(f"BM25 найдено кандидатов: {len(bm25_chunks)}")
 
     if not bm25_chunks:
@@ -36,8 +40,8 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
             logger.error("В БД нет чанков.")
             return []
 
-    # 2️⃣ Dense embedding rerank (берем top-10)
-    top_chunks = await embedding_rerank(question, bm25_chunks, top_n=10)
+    # 2️⃣ Dense embedding rerank (использует rewritten_query)
+    top_chunks = await embedding_rerank(rewritten_query, bm25_chunks, top_n=10)
     logger.info(f"Топ после cosine rerank: {len(top_chunks)}")
 
     # 3️⃣ LLM rerank
@@ -48,39 +52,30 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
         logger.warning("LLM не вернул порядок чанков. Используем cosine top-N как fallback.")
         return top_chunks[:5]  # fallback
 
-    # 4️⃣ Финальные чанки после LLM rerank (top-3)
+    # 4️⃣ Финальные чанки после LLM rerank
     final_chunks = [top_chunks[i - 1] for i in reranked_indices if 0 < i <= len(top_chunks)][:5]
     logger.info(f"Финальные чанки после LLM rerank: {len(final_chunks)}")
 
     return final_chunks
 
 
-async def bm25_search(session: AsyncSession, question: str, limit: int = 80) -> List[Chunk]:
+async def bm25_search(session: AsyncSession, rewritten_query: str, limit: int = 80) -> List[Chunk]:
     """
     Поиск в PostgreSQL по bm25_text.
-    Использует LLM для rewriting и expansion.
+    Использует expansion от переписанного запроса.
     """
-    # Удаляем стоп-слова
-    cleaned_terms = remove_stopwords(question)
+    # Удаляем стоп-слова из переписанного запроса (на всякий случай)
+    cleaned_terms = remove_stopwords(rewritten_query)
     if not cleaned_terms:
-        logger.warning("После удаления стоп-слов ничего не осталось.")
+        logger.warning("После удаления стоп-слов из переписанного запроса ничего не осталось.")
         return []
 
-    # Шаг 1: Rewriting
-    rewritten_query = await rewrite_query_llm(" ".join(cleaned_terms))
-    logger.info(f"Rewritten query: {rewritten_query}")
-
-    if not rewritten_query:
-        logger.warning("LLM не вернул переписанный запрос.")
-        return []
-
-    # Шаг 2: Expansion
-    expanded_terms = await expand_query_terms_llm(rewritten_query)
+    # Query expansion
+    expanded_terms = await expand_query_terms_llm(" ".join(cleaned_terms))
     if not expanded_terms:
         logger.warning("LLM не вернул expansion terms.")
         return []
 
-    # OR-запрос
     tsquery_string = " | ".join(expanded_terms)
     logger.info(f"BM25 tsquery: {tsquery_string}")
 
@@ -96,7 +91,6 @@ async def bm25_search(session: AsyncSession, question: str, limit: int = 80) -> 
     result = await session.execute(stmt)
     chunks = result.scalars().all()
     return chunks
-
 
 def remove_stopwords(text: str) -> List[str]:
     """
@@ -151,6 +145,7 @@ async def expand_query_terms_llm(text: str) -> List[str]:
 async def embedding_rerank(question: str, bm25_chunks: List[Chunk], top_n: int = 10) -> List[Chunk]:
     """
     Семантический rerank: сортировка по cosine similarity.
+    Добавлен порог схожести — fallback на raw при нехватке релевантных.
     """
     logger.debug("Генерация эмбеддинга для вопроса")
     query_embedding = np.array(embed_text(question))
@@ -163,13 +158,26 @@ async def embedding_rerank(question: str, bm25_chunks: List[Chunk], top_n: int =
         score = cosine_similarity(query_embedding, chunk_vector)
         scored_chunks.append((chunk, score))
 
+    if not scored_chunks:
+        logger.warning("❌ Нет чанков с эмбеддингами")
+        return []
+
     # Сортировка по убыванию схожести
     scored_chunks.sort(key=lambda x: x[1], reverse=True)
 
-    # Топ-N результатов
-    top_chunks = [chunk for chunk, score in scored_chunks[:top_n]]
-    return top_chunks
+    # Пороговое значение
+    MIN_SIMILARITY_THRESHOLD = 0.75
+    filtered_chunks = [chunk for chunk, score in scored_chunks if score >= MIN_SIMILARITY_THRESHOLD]
 
+    logger.info(f"🎯 Cosine ≥ {MIN_SIMILARITY_THRESHOLD}: {len(filtered_chunks)} из {len(scored_chunks)}")
+
+    if len(filtered_chunks) < top_n:
+        logger.warning("⚠️ Недостаточно релевантных чанков, fallback на top-N")
+        top_chunks = [chunk for chunk, _ in scored_chunks[:top_n]]
+    else:
+        top_chunks = filtered_chunks[:top_n]
+
+    return top_chunks
 
 def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
     """
