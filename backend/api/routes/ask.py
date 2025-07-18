@@ -52,6 +52,10 @@ async def ask_endpoint(question: str):
                 content={"answer": "No relevant sections found.", "question": question, "mode": "NORMAL"}
             )
 
+        # 💬 Логируем номера всех § в контексте
+        valid_section_numbers = [chunk.section_number for chunk in top_chunks]
+        logger.info(f"🔎 Контекст содержит следующие section_number: {valid_section_numbers}")
+
         # 2️⃣ Context building
         context_start = time.time()
         context = build_context(top_chunks)
@@ -66,7 +70,7 @@ async def ask_endpoint(question: str):
 
         # 4️⃣ LLM call
         llm_start = time.time()
-        answer = await call_llm(prompt)
+        answer = await call_llm(prompt, purpose="answer")
         llm_duration = time.time() - llm_start
         logger.info(f"Answer received from LLM in {llm_duration:.2f}s")
 

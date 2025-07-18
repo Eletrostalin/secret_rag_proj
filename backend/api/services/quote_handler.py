@@ -2,9 +2,7 @@ import logging
 from typing import Optional, List
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.services.llm_client import call_llm
 from backend.api.services.filter_chunks_via_llm import filter_chunks_via_llm
 from backend.db.database import async_session
 from backend.db.models import Chunk

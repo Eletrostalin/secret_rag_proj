@@ -25,7 +25,7 @@ class Chunk(Base):
 
     # Поиск
     bm25_text = Column(TSVECTOR)
-    embedding_vector = Column(Vector(384))
+    embedding_vector = Column(Vector(1024))
 
     meta = Column(JSONB, nullable=True)
 

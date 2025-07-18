@@ -35,7 +35,7 @@ async def filter_chunks_via_llm(question: str, top_chunks: List[str]) -> List[in
         logger.debug(f"Финальный промпт для LLM (первые 2000 символов):\n{full_prompt[:2000]}")
 
         # 3️⃣ Запрос к LLM
-        llm_response = await call_llm(full_prompt)
+        llm_response = await call_llm(full_prompt, purpose="filter")
         logger.info(f"Ответ LLM (сырой): '{llm_response}'")
 
         # 4️⃣ Парсинг ответа — ожидаем список номеров через запятую
@@ -72,7 +72,7 @@ async def rerank_chunks_via_llm(question: str, top_chunks: List[str]) -> List[in
 
         logger.debug(f"Промпт для rerank (обрезан):\n{full_prompt[:2000]}")
 
-        response = await call_llm(full_prompt)
+        response = await call_llm(full_prompt, purpose="rerank")
         logger.info(f"Ответ LLM (сырой): '{response}'")
 
         result = []

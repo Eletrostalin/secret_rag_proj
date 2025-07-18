@@ -4,6 +4,7 @@ from typing import List
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.services.filter_chunks_via_llm import rerank_chunks_via_llm
 from backend.api.services.llm_client import call_llm
 from backend.db.database import async_session
 from backend.db.models import Chunk
@@ -15,12 +16,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+
 async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> List[Chunk]:
-    """
-    Главная функция retrieval.
-    На входе: вопрос (строка).
-    На выходе: топовые чанки (список моделей Chunk).
-    """
     logger.info(f"Начинаем поиск по запросу: {question}")
 
     if session is None:
@@ -32,21 +29,30 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
     logger.info(f"BM25 найдено кандидатов: {len(bm25_chunks)}")
 
     if not bm25_chunks:
-        logger.warning("BM25 ничего не вернул. Пробуем fallback на все чанки.")
-        # Fallback: загрузить все
+        logger.warning("BM25 ничего не вернул. Fallback: все чанки из БД")
         result = await session.execute(select(Chunk))
         bm25_chunks = result.scalars().all()
-        logger.info(f"⚠️ Fallback-режим: загружено {len(bm25_chunks)} всех чанков из БД для дальнейшего rerank.")
-
         if not bm25_chunks:
-            logger.error("Вообще нет данных в таблице chunks!")
+            logger.error("В БД нет чанков.")
             return []
 
-    # 2️⃣ Dense reranking
-    top_chunks = await embedding_rerank(question, bm25_chunks)
-    logger.info(f"Финальный топ после rerank: {len(top_chunks)}")
+    # 2️⃣ Dense embedding rerank (берем top-10)
+    top_chunks = await embedding_rerank(question, bm25_chunks, top_n=10)
+    logger.info(f"Топ после cosine rerank: {len(top_chunks)}")
 
-    return top_chunks
+    # 3️⃣ LLM rerank
+    chunk_texts = [chunk.text for chunk in top_chunks]
+    reranked_indices = await rerank_chunks_via_llm(question, chunk_texts)
+
+    if not reranked_indices:
+        logger.warning("LLM не вернул порядок чанков. Используем cosine top-N как fallback.")
+        return top_chunks[:5]  # fallback
+
+    # 4️⃣ Финальные чанки после LLM rerank (top-3)
+    final_chunks = [top_chunks[i - 1] for i in reranked_indices if 0 < i <= len(top_chunks)][:5]
+    logger.info(f"Финальные чанки после LLM rerank: {len(final_chunks)}")
+
+    return final_chunks
 
 
 async def bm25_search(session: AsyncSession, question: str, limit: int = 80) -> List[Chunk]:

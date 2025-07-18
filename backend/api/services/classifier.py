@@ -23,7 +23,7 @@ async def classify_request(question: str) -> dict:
     logger.info(f"Classifying question: {question}")
 
     try:
-        classification = await call_llm(prompt)
+        classification = await call_llm(prompt, purpose="classification")
         classification = classification.strip().upper()
         logger.info(f"Raw classification response: {classification}")
 

@@ -1,17 +1,41 @@
 import logging
 import asyncio
+from typing import Optional, Literal
 from openai import AsyncOpenAI
-from backend.config import OPENAI_API_KEY, OPENAI_MODEL
+
+from backend.config import (
+    OPENAI_API_KEY,
+    OPENAI_MODEL_ANSWER,
+    OPENAI_MODEL_CLASSIFY,
+    OPENAI_MODEL_REWRITE,
+    OPENAI_MODEL_EXPAND,
+    OPENAI_MODEL_FILTER,
+    OPENAI_MODEL_RERANK,
+)
 
 # Настройка логгера
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Инициализация асинхронного клиента OpenAI один раз на модуль
+# Инициализация клиента OpenAI
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 # Таймаут на случай, если модель зависнет
 DEFAULT_LLM_TIMEOUT = 60
+
+
+def select_model(purpose: Optional[Literal["classification", "rewrite", "expand", "filter", "rerank", "answer"]]) -> str:
+    """
+    Возвращает модель в зависимости от цели вызова.
+    """
+    return {
+        "classification": OPENAI_MODEL_CLASSIFY,
+        "rewrite": OPENAI_MODEL_REWRITE,
+        "expand": OPENAI_MODEL_EXPAND,
+        "filter": OPENAI_MODEL_FILTER,
+        "rerank": OPENAI_MODEL_RERANK,
+        "answer": OPENAI_MODEL_ANSWER,
+    }.get(purpose, OPENAI_MODEL_ANSWER)  # fallback на "answer"
 
 
 def try_split_prompt(prompt: str):
@@ -20,9 +44,6 @@ def try_split_prompt(prompt: str):
     Если есть — разбивает prompt на две части:
       - system_content
       - user_content
-    Это позволяет использовать кастомные system-подсказки.
-
-    Если маркера нет, возвращает None — значит будет fallback на дефолтный system prompt.
     """
     if "=== QUESTION ===" in prompt:
         parts = prompt.split("=== QUESTION ===")
@@ -34,38 +55,28 @@ def try_split_prompt(prompt: str):
     return None
 
 
-async def call_llm(prompt: str, model: str = None) -> str:
+async def call_llm(prompt: str, purpose: Optional[str] = None, model: Optional[str] = None) -> str:
     """
     Универсальная точка входа для запроса к LLM.
-    - Разбирает prompt на system/user части (если есть маркер === QUESTION ===)
-    - Если маркера нет — использует дефолтный system prompt
-    - Делает асинхронный вызов к OpenAI ChatCompletion
-    - Оборачивает вызов в timeout
-    - Логирует результат и возвращает текст
-
-    Этот метод позволяет гибко отправлять и простые, и форматированные промпты.
+    - Поддерживает выбор модели через `purpose` или явный `model`.
+    - Поддерживает кастомные system/user части через "=== QUESTION ===".
+    - Оборачивает вызов в timeout.
     """
-    chosen_model = model or OPENAI_MODEL
+    chosen_model = model or select_model(purpose)
     logger.info(f"Calling OpenAI model: {chosen_model}")
 
-    # --- 1️⃣ Разбор prompt на system/user роли
+    # --- Разбор system/user prompt
     split_result = try_split_prompt(prompt)
     if split_result:
         system_content, user_content = split_result
     else:
-        # Фоллбек, если маркера нет
         system_content = "You are a helpful assistant."
         user_content = prompt.strip()
 
     logger.debug(f"SYSTEM MESSAGE (truncated): {system_content[:500]}")
     logger.debug(f"USER MESSAGE (truncated): {user_content[:500]}")
 
-    # --- 2️⃣ Внутренняя корутина для OpenAI вызова
     async def _call_openai():
-        """
-        Фактический вызов к OpenAI API.
-        Вынесено в подфункцию для удобного оборачивания в timeout.
-        """
         response = await client.chat.completions.create(
             model=chosen_model,
             messages=[
@@ -76,7 +87,6 @@ async def call_llm(prompt: str, model: str = None) -> str:
         )
         return response.choices[0].message.content.strip()
 
-    # --- 3️⃣ Защита таймаутом
     try:
         answer = await asyncio.wait_for(_call_openai(), timeout=DEFAULT_LLM_TIMEOUT)
         logger.info("LLM returned a response")
