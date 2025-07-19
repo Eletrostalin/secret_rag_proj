@@ -86,6 +86,7 @@ async def bm25_search(session: AsyncSession, rewritten_query: str, limit: int = 
     chunks = result.scalars().all()
     return chunks
 
+
 def remove_stopwords(text: str) -> List[str]:
     """
     Удаляет очень частые стоп-слова (очень простой список для примера).
