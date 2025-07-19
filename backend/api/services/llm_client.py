@@ -3,6 +3,11 @@ import asyncio
 from typing import Optional, Literal
 from openai import AsyncOpenAI
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+
+
 from backend.config import (
     OPENAI_API_KEY,
     OPENAI_MODEL_ANSWER,

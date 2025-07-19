@@ -41,7 +41,7 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
             return []
 
     # 2️⃣ Dense embedding rerank (использует 🟢 сырой вопрос)
-    top_chunks = await embedding_rerank(question, bm25_chunks, top_n=10)
+    top_chunks = await embedding_rerank(rewritten_query, bm25_chunks, top_n=10)
     logger.info(f"Топ после cosine rerank: {len(top_chunks)}")
 
     # 3️⃣ LLM rerank
@@ -62,7 +62,7 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
 async def bm25_search(session: AsyncSession, rewritten_query: str, limit: int = 80) -> List[Chunk]:
     """
     Поиск в PostgreSQL по bm25_text.
-    Использует expansion от переписанного запроса.
+    Использует только переписанный запрос без expansion.
     """
     # Удаляем стоп-слова из переписанного запроса (на всякий случай)
     cleaned_terms = remove_stopwords(rewritten_query)
@@ -70,15 +70,9 @@ async def bm25_search(session: AsyncSession, rewritten_query: str, limit: int = 
         logger.warning("После удаления стоп-слов из переписанного запроса ничего не осталось.")
         return []
 
-    # Query expansion
-    expanded_terms = await expand_query_terms_llm(" ".join(cleaned_terms))
-    if not expanded_terms:
-        logger.warning("LLM не вернул expansion terms.")
-        return []
-
-    tsquery_string = " | ".join(expanded_terms)
-    logger.info(f"BM25 tsquery: {tsquery_string}")
-
+    # 🚫 Expansion отключён
+    tsquery_string = " | ".join(cleaned_terms)
+    logger.info(f"🔍 BM25 final tsquery (no expansion): {tsquery_string}")
     tsquery = func.to_tsquery('english', tsquery_string)
 
     stmt = (
@@ -176,7 +170,10 @@ async def embedding_rerank(query_for_embedding: str, bm25_chunks: List[Chunk], t
     MIN_SIMILARITY_THRESHOLD = 0.8
     filtered_chunks = [chunk for chunk, score in scored_chunks if score >= MIN_SIMILARITY_THRESHOLD]
 
-    logger.info(f"🎯 Отобрано {len(filtered_chunks)} чанков с cosine ≥ {MIN_SIMILARITY_THRESHOLD}")
+    section_ids = [chunk.section_number or "??" for chunk in filtered_chunks]
+
+    logger.info(
+        f"🎯 Отобрано {len(filtered_chunks)} чанков с cosine ≥ {MIN_SIMILARITY_THRESHOLD} — §§ {', '.join(section_ids)}")
 
     if len(filtered_chunks) >= top_n:
         return filtered_chunks[:top_n]
