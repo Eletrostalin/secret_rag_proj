@@ -24,9 +24,9 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
         async with async_session() as session:
             return await retrieve_top_chunks(question, session)
 
-    # 🔁 Переписываем запрос для embedding
+    # 🔁 Переписываем запрос (только для BM25)
     rewritten_query = await rewrite_query_llm(question)
-    logger.info(f"Rewritten query for embedding: {rewritten_query}")
+    logger.info(f"Rewritten query for BM25: {rewritten_query}")
 
     # 1️⃣ BM25 Retrieval (использует expansion внутри)
     bm25_chunks = await bm25_search(session, rewritten_query)
@@ -40,8 +40,8 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
             logger.error("В БД нет чанков.")
             return []
 
-    # 2️⃣ Dense embedding rerank (использует rewritten_query)
-    top_chunks = await embedding_rerank(rewritten_query, bm25_chunks, top_n=10)
+    # 2️⃣ Dense embedding rerank (использует 🟢 сырой вопрос)
+    top_chunks = await embedding_rerank(question, bm25_chunks, top_n=10)
     logger.info(f"Топ после cosine rerank: {len(top_chunks)}")
 
     # 3️⃣ LLM rerank
@@ -50,10 +50,10 @@ async def retrieve_top_chunks(question: str, session: AsyncSession = None) -> Li
 
     if not reranked_indices:
         logger.warning("LLM не вернул порядок чанков. Используем cosine top-N как fallback.")
-        return top_chunks[:5]  # fallback
+        return top_chunks[:6]  # fallback
 
     # 4️⃣ Финальные чанки после LLM rerank
-    final_chunks = [top_chunks[i - 1] for i in reranked_indices if 0 < i <= len(top_chunks)][:5]
+    final_chunks = [top_chunks[i - 1] for i in reranked_indices if 0 < i <= len(top_chunks)][:6]
     logger.info(f"Финальные чанки после LLM rerank: {len(final_chunks)}")
 
     return final_chunks
@@ -142,13 +142,16 @@ async def expand_query_terms_llm(text: str) -> List[str]:
         return []
 
 
-async def embedding_rerank(question: str, bm25_chunks: List[Chunk], top_n: int = 10) -> List[Chunk]:
+async def embedding_rerank(query_for_embedding: str, bm25_chunks: List[Chunk], top_n: int = 10) -> List[Chunk]:
     """
-    Семантический rerank: сортировка по cosine similarity.
-    Добавлен порог схожести — fallback на raw при нехватке релевантных.
+    Семантический rerank:
+    - сортирует все чанки по cosine similarity,
+    - отбирает те, что >= MIN_SIMILARITY_THRESHOLD,
+    - если их достаточно — возвращает top_n отфильтрованных,
+    - иначе — fallback: top_n самых близких без порога.
     """
-    logger.debug("Генерация эмбеддинга для вопроса")
-    query_embedding = np.array(embed_text(question))
+    logger.debug("Генерация эмбеддинга для запроса")
+    query_embedding = np.array(embed_text(query_for_embedding))
 
     scored_chunks = []
     for chunk in bm25_chunks:
@@ -165,19 +168,22 @@ async def embedding_rerank(question: str, bm25_chunks: List[Chunk], top_n: int =
     # Сортировка по убыванию схожести
     scored_chunks.sort(key=lambda x: x[1], reverse=True)
 
-    # Пороговое значение
-    MIN_SIMILARITY_THRESHOLD = 0.75
+    # 📊 Логирование статистики
+    scores = [score for _, score in scored_chunks]
+    logger.info(f"📈 Cosine stats — max: {max(scores):.4f}, min: {min(scores):.4f}, avg: {np.mean(scores):.4f}")
+
+    # Пороговая фильтрация
+    MIN_SIMILARITY_THRESHOLD = 0.8
     filtered_chunks = [chunk for chunk, score in scored_chunks if score >= MIN_SIMILARITY_THRESHOLD]
 
-    logger.info(f"🎯 Cosine ≥ {MIN_SIMILARITY_THRESHOLD}: {len(filtered_chunks)} из {len(scored_chunks)}")
+    logger.info(f"🎯 Отобрано {len(filtered_chunks)} чанков с cosine ≥ {MIN_SIMILARITY_THRESHOLD}")
 
-    if len(filtered_chunks) < top_n:
-        logger.warning("⚠️ Недостаточно релевантных чанков, fallback на top-N")
-        top_chunks = [chunk for chunk, _ in scored_chunks[:top_n]]
+    if len(filtered_chunks) >= top_n:
+        return filtered_chunks[:top_n]
     else:
-        top_chunks = filtered_chunks[:top_n]
+        logger.warning("⚠️ Недостаточно релевантных чанков, используем fallback на top-N")
+        return [chunk for chunk, _ in scored_chunks[:top_n]]
 
-    return top_chunks
 
 def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
     """
@@ -188,3 +194,5 @@ def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
     if norm1 == 0 or norm2 == 0:
         return 0.0
     return np.dot(vec1, vec2) / (norm1 * norm2)
+
+

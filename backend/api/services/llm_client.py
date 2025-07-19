@@ -99,3 +99,12 @@ async def call_llm(prompt: str, purpose: Optional[str] = None, model: Optional[s
     except Exception as e:
         logger.error(f"Error calling OpenAI: {e}")
         raise Exception("Error communicating with the language model.")
+
+
+# def select_model(purpose: Optional[str]) -> str:
+#     """
+#     ВРЕМЕННАЯ ЗАГЛУШКА:
+#     Всегда возвращает модель для финального ответа — OPENAI_MODEL_ANSWER,
+#     независимо от цели запроса (classification, rewrite и т.д.).
+#     """
+#     return OPENAI_MODEL_ANSWER

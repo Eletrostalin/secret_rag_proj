@@ -4,14 +4,15 @@ from dotenv import load_dotenv
 # Загружаем .env
 load_dotenv()
 
+
 # OpenAI
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL_ANSWER = os.getenv("OPENAI_MODEL_ANSWER", "gpt-4o")
+OPENAI_MODEL_ANSWER = os.getenv("OPENAI_MODEL_ANSWER", "gpt-4.1")
 OPENAI_MODEL_CLASSIFY = os.getenv("OPENAI_MODEL_CLASSIFY", "gpt-4o-mini")
-OPENAI_MODEL_REWRITE = os.getenv("OPENAI_MODEL_REWRITE", "gpt-4.1")
-OPENAI_MODEL_EXPAND = os.getenv("OPENAI_MODEL_EXPAND", "gpt-4.1")
+OPENAI_MODEL_REWRITE = os.getenv("OPENAI_MODEL_REWRITE", "gpt-4o")
+OPENAI_MODEL_EXPAND = os.getenv("OPENAI_MODEL_EXPAND", "gpt-4o")
 OPENAI_MODEL_FILTER = os.getenv("OPENAI_MODEL_FILTER", "gpt-4.1")
-OPENAI_MODEL_RERANK = os.getenv("OPENAI_MODEL_RERANK", "o3-pro")
+OPENAI_MODEL_RERANK = os.getenv("OPENAI_MODEL_RERANK", "gpt-4.1")
 
 if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY не найден в .env или переменных окружения")
